@@ -1,8 +1,22 @@
+import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh p-6">
+    <div className="flex min-h-svh flex-col p-6">
+      <header className="flex items-center justify-end gap-2">
+        <Show when="signed-out">
+          <SignInButton>
+            <Button variant="outline">Sign in</Button>
+          </SignInButton>
+          <SignUpButton>
+            <Button>Sign up</Button>
+          </SignUpButton>
+        </Show>
+        <Show when="signed-in">
+          <UserButton />
+        </Show>
+      </header>
       <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
         <div>
           <h1 className="font-medium">Project ready!</h1>
