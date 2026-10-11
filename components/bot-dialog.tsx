@@ -117,11 +117,10 @@ export function BotDialog({ open, onOpenChange }: BotDialogProps) {
   function onSubmit(data: InsertBotInput) {
     startTransition(async () => {
       try {
-        const bot = await createBot(data)
+        const { bot } = await createBot(data)
         handleOpenChange(false)
         toast.add({
           title: `${bot.name} is ready`,
-          description: "Say hello to start the conversation.",
           type: "success",
         })
         router.refresh()
