@@ -1,5 +1,4 @@
 import { auth } from "@clerk/nextjs/server"
-import { UserButton } from "@clerk/nextjs"
 import { nanoid } from "nanoid"
 import { BotDialog } from "@/components/bot-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
@@ -15,11 +14,7 @@ import {
 export default async function Page() {
   await auth.protect()
   return (
-    <div className="flex min-h-svh flex-col p-6">
-      <header className="flex items-center justify-end gap-2">
-        <UserButton />
-      </header>
-      <main className="flex flex-1 items-center justify-center">
+    <main className="flex flex-1 items-center justify-center p-6">
         <Empty className="max-w-lg gap-6 border-0">
           <EmptyHeader className="gap-3">
             <EmptyMedia>
@@ -38,6 +33,5 @@ export default async function Page() {
           </EmptyContent>
         </Empty>
       </main>
-    </div>
   )
 }
