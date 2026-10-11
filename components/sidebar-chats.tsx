@@ -34,7 +34,7 @@ export async function SidebarChats() {
               <SidebarMenuButton
                 size="lg"
                 tooltip={chat.name}
-                render={<Link href={`/chat/${chat.id}`} />}
+                render={<Link href={`/chats/${chat.id}`} />}
               >
                 <ChatAvatar
                   seed={chat.avatarSeed}
