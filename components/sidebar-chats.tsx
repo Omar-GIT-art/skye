@@ -33,7 +33,7 @@ export async function SidebarChats() {
             <SidebarMenuItem key={chat.id}>
               <SidebarMenuButton
                 size="lg"
-                tooltip={chat.name}
+                tooltip={{ children: chat.name, sideOffset: 16 }}
                 render={<Link href={`/chats/${chat.id}`} />}
               >
                 <ChatAvatar

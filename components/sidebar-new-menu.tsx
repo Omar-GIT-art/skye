@@ -20,13 +20,23 @@ export function SidebarNewMenu() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="ghost" size="icon" aria-label="New" />}
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="New"
+              className="rounded-xl"
+            />
+          }
         >
           <PlusIcon />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuGroup>
-            <DropdownMenuItem onClick={() => setBotOpen(true)} className="cursor-pointer">
+            <DropdownMenuItem
+              onClick={() => setBotOpen(true)}
+              className="cursor-pointer"
+            >
               <PlusIcon />
               Create new bot
             </DropdownMenuItem>
