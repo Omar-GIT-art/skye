@@ -66,3 +66,33 @@ thing:
 Only JavaScript and the HTTP API have a pre-10 form. The other six cores were
 released in 2026 and never had one, so any older-looking PHP, Python, Rust, Go,
 Dart or C# API attributed to DiceBear is invented rather than outdated.
+
+## Forms
+
+- Define validation schemas with plain `zod` (`z.object()` mirroring the table
+  columns, exported from `db/schema.ts` alongside an inferred input type). Do
+  NOT use `drizzle-zod`'s `createInsertSchema` in this repo: it builds the
+  object through its own zod instance, and with multiple zod copies in the
+  dependency graph (top-level v3 plus nested v4 under `@neon/*`) the instances
+  get mixed inside the Next 16 bundle. Zod v4's shape check is lazy, so the
+  schema imports fine and even parses under plain Node, then throws
+  `Invalid element at key "<field>": expected a Zod schema` at runtime on the
+  first form validation or submit. A single `zod` import keeps one instance
+  and avoids the whole class of bug.
+- Build forms with `react-hook-form` + `zodResolver(schema)` and shadcn `Field`
+  composition: `FieldGroup` wrapping `Controller` → `Field data-invalid` →
+  `FieldLabel` + control with `aria-invalid` → `FieldError
+  errors={[fieldState.error]}`. Reference:
+  https://ui.shadcn.com/docs/forms/react-hook-form
+- This project uses Base UI primitives, not Radix: custom dialog triggers and
+  close buttons use `render={<Button ... />}` (never `asChild`); `ToggleGroup`
+  is array-valued (`value={[v]}`, `onValueChange={(vals) => ...vals[0]}`); use
+  it for option sets of 2–7 choices such as template presets. Toasts go through
+  the `toast` manager from `@/components/ui/toast` (`toast.add({ title,
+  description, type })`); `<Toaster />` is already mounted in `app/layout.tsx`.
+- Server actions live in `actions/*.ts` with `"use server"`: check `await
+  auth()` from `@clerk/nextjs/server` first (throw when unauthenticated),
+  validate the input with the shared schema's `.parse()`, then write via `db`.
+- Verify with `npm run typecheck`, `npx eslint <files>`, and `npm run build`.
+  The build step matters: bundler-only bugs like the mixed-zod-instance crash
+  above never reproduce under plain Node, so typecheck alone is not enough.

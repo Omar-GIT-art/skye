@@ -1,9 +1,8 @@
 import { auth } from "@clerk/nextjs/server"
 import { UserButton } from "@clerk/nextjs"
-import { PlusIcon } from "lucide-react"
 import { nanoid } from "nanoid"
+import { BotDialog } from "@/components/bot-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
-import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyContent,
@@ -35,10 +34,7 @@ export default async function Page() {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent className="gap-3">
-            <Button variant="secondary" size="lg" className="rounded-full px-5">
-              <PlusIcon data-icon="inline-start" />
-              Create a new bot
-            </Button>
+            <BotDialog />
           </EmptyContent>
         </Empty>
       </main>
