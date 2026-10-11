@@ -1,4 +1,3 @@
-import { UserButton } from "@clerk/nextjs"
 import {
   Sidebar,
   SidebarContent,
@@ -6,17 +5,20 @@ import {
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { SidebarNewMenu } from "./sidebar-new-menu"
+import { SidebarChats } from "./sidebar-chats"
 import { UserMenu } from "./user-menu"
 
 export function AppSidebar() {
   return (
     <Sidebar>
-      <SidebarHeader />
+      <SidebarHeader className="flex-row items-center justify-start">
+        <SidebarNewMenu />
+      </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup />
+        <SidebarChats />
         <SidebarGroup />
       </SidebarContent>
       <SidebarFooter>

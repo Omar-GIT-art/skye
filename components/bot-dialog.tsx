@@ -139,14 +139,16 @@ export function BotDialog({ open, onOpenChange }: BotDialogProps) {
 
   return (
     <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        render={
-          <Button variant="secondary" size="lg" className="rounded-full px-4" />
-        }
-      >
-        <PlusIcon data-icon="inline-start" />
-        Create a new bot
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger
+          render={
+            <Button variant="secondary" size="lg" className="rounded-full px-4" />
+          }
+        >
+          <PlusIcon data-icon="inline-start" />
+          Create a new bot
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New bot</DialogTitle>
