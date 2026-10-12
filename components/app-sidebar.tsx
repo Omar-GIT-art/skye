@@ -26,7 +26,7 @@ export async function AppSidebar() {
         <SidebarSearch chats={chats} />
       </SidebarHeader>
       <SidebarContent>
-        <SidebarChats />
+        <SidebarChats chats={chats} />
         <SidebarGroup />
       </SidebarContent>
       <SidebarFooter>

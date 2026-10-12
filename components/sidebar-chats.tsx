@@ -1,16 +1,13 @@
-import Link from "next/link"
 import { differenceInSeconds, formatDistanceToNow } from "date-fns"
 
-import { ChatAvatar } from "@/components/chat-avatar"
 import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { getUserChats } from "@/queries/chats"
+import { getUserChats, type SidebarChat } from "@/queries/chats"
+import { SidebarChatItem } from "@/components/sidebar-chat-item"
 
 function formatChatTime(date: Date) {
   const seconds = differenceInSeconds(new Date(), date)
@@ -21,40 +18,23 @@ function formatChatTime(date: Date) {
   return formatDistanceToNow(date, { addSuffix: false })
 }
 
-export async function SidebarChats() {
-  const chats = await getUserChats()
+export async function SidebarChats({ chats }: { chats?: SidebarChat[] }) {
+  const items = chats ?? (await getUserChats())
 
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Chats</SidebarGroupLabel>
       <SidebarGroupContent>
-        <SidebarMenu>
-          {chats.map((chat) => (
-            <SidebarMenuItem key={chat.id}>
-              <SidebarMenuButton
-                size="lg"
-                tooltip={{ children: chat.name, sideOffset: 16 }}
-                render={<Link href={`/chats/${chat.id}`} />}
-              >
-                <ChatAvatar
-                  seed={chat.avatarSeed}
-                  className="size-8 shrink-0 rounded-full"
-                />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="flex w-full items-baseline justify-between gap-2">
-                    <span className="truncate font-medium">{chat.name}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {formatChatTime(chat.lastMessageAt)}
-                    </span>
-                  </span>
-                  {chat.lastMessagePreview ? (
-                    <span className="truncate text-xs text-muted-foreground">
-                      {chat.lastMessagePreview}
-                    </span>
-                  ) : null}
-                </span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+        <SidebarMenu className="gap-1">
+          {items.map((chat) => (
+            <SidebarChatItem
+              key={chat.id}
+              id={chat.id}
+              name={chat.name}
+              avatarSeed={chat.avatarSeed}
+              lastMessagePreview={chat.lastMessagePreview}
+              timeLabel={formatChatTime(chat.lastMessageAt)}
+            />
           ))}
         </SidebarMenu>
       </SidebarGroupContent>

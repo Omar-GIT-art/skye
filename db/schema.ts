@@ -113,3 +113,35 @@ export const insertBotSchema = z.object({
 })
 
 export type InsertBotInput = z.infer<typeof insertBotSchema>
+
+export const updateBotSchema = z.object({
+  id: z.string().trim().min(1, "Missing bot id."),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Give your bot a name.")
+    .max(80, "Keep the name under 80 characters."),
+  avatar: z
+    .string()
+    .trim()
+    .min(1, "Pick a face for your bot.")
+    .max(256, "Avatar seed is too long."),
+  job: z
+    .string()
+    .trim()
+    .min(1, "Give your bot a job.")
+    .max(120, "Keep the job under 120 characters."),
+  instructions: z
+    .string()
+    .trim()
+    .max(2000, "Keep instructions under 2000 characters.")
+    .optional(),
+})
+
+export type UpdateBotInput = z.infer<typeof updateBotSchema>
+
+export const deleteBotSchema = z.object({
+  id: z.string().trim().min(1, "Missing bot id."),
+})
+
+export type DeleteBotInput = z.infer<typeof deleteBotSchema>

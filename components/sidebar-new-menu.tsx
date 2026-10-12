@@ -4,6 +4,7 @@ import * as React from "react"
 import { PlusIcon, UsersIcon } from "lucide-react"
 
 import { BotDialog } from "@/components/bot-dialog"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -17,7 +18,7 @@ export function SidebarNewMenu() {
   const [botOpen, setBotOpen] = React.useState(false)
 
   return (
-    <>
+    <div className="flex w-full flex-row items-center justify-between gap-1 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:flex-col">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -47,7 +48,8 @@ export function SidebarNewMenu() {
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+      <ThemeToggle />
       <BotDialog open={botOpen} onOpenChange={setBotOpen} />
-    </>
+    </div>
   )
 }
