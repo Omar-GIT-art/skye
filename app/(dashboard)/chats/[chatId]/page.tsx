@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 
 import { ChatHeader } from "@/components/chat-header"
 import { Chat } from "@/components/chat"
+import { getChatSession } from "@/actions/chat"
 import { getChatById } from "@/queries/chats"
 
 export default async function Page({
@@ -16,11 +17,16 @@ export default async function Page({
   if (!chat) {
     notFound()
   }
+  const initialSession = await getChatSession(chatId)
 
   return (
     <>
       <ChatHeader name={chat.name} avatarSeed={chat.avatarSeed} bot={chat.bot} />
-      <Chat instructions={chat.bot?.instructions} />
+      <Chat
+        chatId={chat.id}
+        instructions={chat.bot?.instructions}
+        initialSession={initialSession}
+      />
     </>
   )
 }

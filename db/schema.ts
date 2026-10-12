@@ -64,6 +64,20 @@ export const chatMembers = pgTable(
   ]
 )
 
+// Live Trigger.dev chat session state, keyed by chatId. The transport needs
+// this after a page refresh to reconnect to an in-flight stream:
+// the session-scoped PAT (so it doesn't have to re-mint on first paint)
+// and the SSE resume cursor. Conversation history itself lives in the
+// agent's transcript storage; this row is only the reconnect metadata.
+export const chatSessions = pgTable("chat_sessions", {
+  chatId: text("chat_id")
+    .primaryKey()
+    .references(() => chats.id, { onDelete: "cascade" }),
+  publicAccessToken: text("public_access_token").notNull(),
+  lastEventId: text("last_event_id"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+})
+
 export const botsRelations = relations(bots, ({ many }) => ({
   memberships: many(chatMembers),
 }))

@@ -1,9 +1,12 @@
 "use client"
 
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
+import {
+  useLoadTranscript,
+  useTriggerChatTransport,
+  type InferChatUIMessage,
+} from "@trigger.dev/sdk/chat/react"
 import { MessageSquareIcon } from "lucide-react"
-import { useMemo } from "react"
 
 import {
   Conversation,
@@ -18,23 +21,97 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input"
+import {
+  deleteChatSession,
+  loadChatTranscript,
+  mintChatAccessToken,
+  saveChatSession,
+  startChatSession,
+  type ChatSessionState,
+} from "@/actions/chat"
+import type { skyeChat } from "@/trigger/chat"
+
+type SkyeMessage = InferChatUIMessage<typeof skyeChat>
 
 export function Chat({
+  chatId,
   instructions,
+  initialSession,
 }: {
+  chatId: string
   instructions?: string | null
+  initialSession?: ChatSessionState
 }) {
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        body: instructions ? { system: instructions } : undefined,
-      }),
-    [instructions]
-  )
-  const { messages, sendMessage, status, stop, error, regenerate } = useChat({
-    transport,
+  // `sessions` restores the session the previous page lifetime cached
+  // (PAT + resume cursor). Without it, `reconnectToStream` on mount is a
+  // no-op and a refresh mid-turn loses the in-flight answer.
+  const transport = useTriggerChatTransport<typeof skyeChat>({
+    task: "skye-chat",
+    accessToken: ({ chatId }) => mintChatAccessToken(chatId),
+    startSession: ({ chatId, clientData }) =>
+      startChatSession({ chatId, clientData }),
+    clientData: { instructions: instructions ?? undefined },
+    sessions: initialSession ? { [chatId]: initialSession } : undefined,
+    onSessionChange: (id, session) => {
+      // Persist reconnect metadata for the next page load; drop the row
+      // when the session ends so a reload doesn't retry a dead session.
+      // A failed save only costs resume on the next load, never the chat.
+      if (session) {
+        void saveChatSession(id, {
+          publicAccessToken: session.publicAccessToken,
+          lastEventId: session.lastEventId,
+        }).catch(() => {})
+      } else {
+        void deleteChatSession(id).catch(() => {})
+      }
+    },
   })
+  const { messages: initialMessages, isLoading } = useLoadTranscript(
+    chatId,
+    loadChatTranscript,
+    { transport }
+  )
+
+  if (isLoading) {
+    return null
+  }
+
+  return (
+    <ChatBody
+      chatId={chatId}
+      initialMessages={initialMessages}
+      transport={transport}
+    />
+  )
+}
+
+function ChatBody({
+  chatId,
+  initialMessages,
+  transport,
+}: {
+  chatId: string
+  initialMessages: SkyeMessage[]
+  transport: ReturnType<typeof useTriggerChatTransport>
+}) {
+  const {
+    messages,
+    sendMessage,
+    status,
+    stop: aiStop,
+    error,
+    regenerate,
+  } = useChat<SkyeMessage>({
+    id: chatId,
+    transport,
+    messages: initialMessages,
+    resume: initialMessages.length > 0,
+  })
+
+  const stop = () => {
+    aiStop()
+    transport.stopGeneration(chatId)
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
