@@ -5,21 +5,27 @@ import { Monitor } from "lucide-react"
 
 import { BotEditDialog, type EditableBot } from "@/components/bot-edit-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
+import { useChatPanel } from "@/components/chat-panel-context"
 import { Button } from "@/components/ui/button"
 
 export function ChatHeader({
   name,
   avatarSeed,
   bot,
+  scrolled,
 }: {
   name: string
   avatarSeed: string
   bot?: EditableBot | null
+  scrolled?: boolean
 }) {
   const [editOpen, setEditOpen] = React.useState(false)
+  const { open, toggle } = useChatPanel()
 
   return (
-    <header className="-m-4 flex h-12 items-center justify-between border-b border-border bg-background px-4">
+    <header
+      className={`sticky top-0 z-10 flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-4 transition-shadow ${scrolled ? "shadow-[0_12px_24px_-12px_rgb(0_0_0/0.3)]" : "shadow-none"}`}
+    >
       {bot ? (
         <>
           <Button
@@ -52,6 +58,9 @@ export function ChatHeader({
         variant="ghost"
         size="icon-sm"
         aria-label="Desktop view"
+        aria-pressed={open}
+        onClick={toggle}
+        className={open ? "bg-muted" : undefined}
       >
         <Monitor />
       </Button>

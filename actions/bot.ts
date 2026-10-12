@@ -13,6 +13,7 @@ import {
   insertBotSchema,
   updateBotSchema,
 } from "@/db/schema"
+import { createBotSandbox, deleteBotSandbox } from "@/lib/daytona"
 import { nanoid } from "nanoid"
 
 export async function createBot(input: unknown) {
@@ -29,36 +30,51 @@ export async function createBot(input: unknown) {
   const botId = nanoid()
   const chatId = nanoid()
 
-  const [[bot], [chat]] = await db.batch([
-    db
-      .insert(bots)
-      .values({
-        id: botId,
-        name: parsed.name,
-        avatar: parsed.avatar,
-        job: parsed.job,
-        instructions:
-          parsed.instructions && parsed.instructions.length > 0
-            ? parsed.instructions
-            : null,
-        userId,
-      })
-      .returning(),
-    db
-      .insert(chats)
-      .values({
-        id: chatId,
-        userId,
-        kind: "direct",
-      })
-      .returning(),
-    db.insert(chatMembers).values({
-      chatId,
-      botId,
-    }),
-  ])
+  // One Daytona sandbox per bot. Created before the DB rows so its id can
+  // be stored on `bots.sandbox_id`. No exec/start/stop — just create.
+  const sandboxId = await createBotSandbox({ botId, userId })
 
-  return { bot, chat }
+  try {
+    const [[bot], [chat]] = await db.batch([
+      db
+        .insert(bots)
+        .values({
+          id: botId,
+          name: parsed.name,
+          avatar: parsed.avatar,
+          job: parsed.job,
+          instructions:
+            parsed.instructions && parsed.instructions.length > 0
+              ? parsed.instructions
+              : null,
+          sandboxId,
+          userId,
+        })
+        .returning(),
+      db
+        .insert(chats)
+        .values({
+          id: chatId,
+          userId,
+          kind: "direct",
+        })
+        .returning(),
+      db.insert(chatMembers).values({
+        chatId,
+        botId,
+      }),
+    ])
+
+    return { bot, chat }
+  } catch (err) {
+    // Don't strand an orphan sandbox if the DB insert fails.
+    try {
+      await deleteBotSandbox(sandboxId)
+    } catch {
+      // Best effort — the original DB error is what matters.
+    }
+    throw err
+  }
 }
 
 export async function updateBot(input: unknown) {
@@ -143,6 +159,19 @@ export async function deleteBot(input: unknown) {
         .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
     ),
   ])
+
+  // Delete the bot's sandbox. Best effort after the DB rows are gone so a
+  // Daytona outage never blocks bot deletion — just log and move on.
+  if (existing.sandboxId) {
+    try {
+      await deleteBotSandbox(existing.sandboxId)
+    } catch (err) {
+      console.warn(
+        `[daytona] failed to delete sandbox ${existing.sandboxId} for bot ${parsed.id}:`,
+        err
+      )
+    }
+  }
 
   return { deletedChatIds: deletableChatIds }
 }

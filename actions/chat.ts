@@ -69,6 +69,17 @@ export async function loadChatTranscript(params: {
 // Live session reconnect metadata for the transport. Returns undefined when
 // there is nothing to resume (brand-new chat), so the caller can skip
 // hydrating `sessions` instead of failing the page.
+//
+// Only the PAT is restored — never a persisted `lastEventId`. The resume
+// cursor must come from the transcript load (`useLoadTranscript` seeds it
+// from `lastOutEventId`, i.e. just past the persisted history). A persisted
+// cursor goes stale two ways, and the transport prefers it over the fresh
+// transcript seed (it never moves an existing cursor backward):
+// - saves fire-and-forget on every session change, so concurrent upserts
+//   can land out of order and resurrect an older cursor -> the reload
+//   replays already-persisted events -> duplicated messages;
+// - a cursor saved mid-stream sits ahead of the persisted transcript, so a
+//   reload resubscribes past un-persisted events -> lost messages.
 export async function getChatSession(
   chatId: string
 ): Promise<ChatSessionState | undefined> {
@@ -93,12 +104,12 @@ export async function getChatSession(
 
   return {
     publicAccessToken: sessionRow.publicAccessToken,
-    lastEventId: sessionRow.lastEventId ?? undefined,
   }
 }
 
 // Called from the transport's `onSessionChange`: upserts the reconnect
-// metadata every time the cached session changes.
+// metadata every time the cached session changes. Persists only the PAT —
+// see `getChatSession` for why the live cursor is deliberately dropped.
 export async function saveChatSession(
   chatId: string,
   session: ChatSessionState
@@ -109,14 +120,14 @@ export async function saveChatSession(
     .values({
       chatId,
       publicAccessToken: session.publicAccessToken,
-      lastEventId: session.lastEventId ?? null,
+      lastEventId: null,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: chatSessions.chatId,
       set: {
         publicAccessToken: session.publicAccessToken,
-        lastEventId: session.lastEventId ?? null,
+        lastEventId: null,
         updatedAt: new Date(),
       },
     })
