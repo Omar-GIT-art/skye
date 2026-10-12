@@ -96,3 +96,9 @@ Dart or C# API attributed to DiceBear is invented rather than outdated.
 - Verify with `npm run typecheck`, `npx eslint <files>`, and `npm run build`.
   The build step matters: bundler-only bugs like the mixed-zod-instance crash
   above never reproduce under plain Node, so typecheck alone is not enough.
+
+<!-- TRIGGER.DEV SKILLS START -->
+## Trigger.dev agent skills
+
+This project has Trigger.dev agent skills installed in `.agents/skills/`. Before writing or changing Trigger.dev code (background tasks, scheduled tasks, realtime, or chat.agent AI agents), load the most relevant skill: `trigger-authoring-chat-agent`, `trigger-authoring-tasks`, `trigger-chat-agent-advanced`, `trigger-cost-savings`, `trigger-getting-started`, `trigger-realtime-and-frontend`.
+<!-- TRIGGER.DEV SKILLS END -->
