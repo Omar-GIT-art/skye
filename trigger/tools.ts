@@ -342,18 +342,487 @@ export function createSandboxTools(sandboxId: string | null | undefined) {
     toModelOutput: screenshotModelOutput,
   })
 
+  const makeDir = tool({
+    description:
+      "Create a directory (including any missing parents) in the sandbox. Use an absolute path.",
+    inputSchema: z.object({
+      path: z.string().describe("Absolute path of the directory to create."),
+    }),
+    outputSchema: z.object({
+      path: z.string(),
+      ok: z.boolean(),
+    }),
+    execute: async ({ path }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      await sandbox.fs.createFolder(path, "755")
+      return { path, ok: true }
+    },
+  })
+
+  const deleteFile = tool({
+    description:
+      "Delete a file or directory in the sandbox. Pass recursive=true to delete a non-empty directory.",
+    inputSchema: z.object({
+      path: z.string().describe("Absolute path of the file or directory to delete."),
+      recursive: z
+        .boolean()
+        .optional()
+        .describe("Delete directories recursively. Defaults to false."),
+    }),
+    outputSchema: z.object({
+      path: z.string(),
+      ok: z.boolean(),
+    }),
+    execute: async ({ path, recursive }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      await sandbox.fs.deleteFile(path, recursive ?? false)
+      return { path, ok: true }
+    },
+  })
+
+  const moveFile = tool({
+    description:
+      "Move or rename a file or directory in the sandbox. Use absolute paths for both ends.",
+    inputSchema: z.object({
+      source: z
+        .string()
+        .describe("Absolute path of the file or directory to move."),
+      destination: z.string().describe("Absolute destination path."),
+    }),
+    outputSchema: z.object({
+      source: z.string(),
+      destination: z.string(),
+      ok: z.boolean(),
+    }),
+    execute: async ({ source, destination }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      await sandbox.fs.moveFiles(source, destination)
+      return { source, destination, ok: true }
+    },
+  })
+
+  const statFile = tool({
+    description:
+      "Get metadata for a file or directory in the sandbox: size, type, permissions and modification time.",
+    inputSchema: z.object({
+      path: z.string().describe("Absolute path of the file or directory to inspect."),
+    }),
+    outputSchema: z.object({
+      path: z.string(),
+      name: z.string(),
+      isDirectory: z.boolean(),
+      size: z.number(),
+      permissions: z.string(),
+      modifiedAt: z.string(),
+    }),
+    execute: async ({ path }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      const info = await sandbox.fs.getFileDetails(path)
+      return {
+        path: info.path ?? path,
+        name: info.name,
+        isDirectory: info.isDir,
+        size: info.size,
+        permissions: info.permissions,
+        modifiedAt: info.modifiedAt,
+      }
+    },
+  })
+
+  const searchFiles = tool({
+    description:
+      "Search the contents of files under a sandbox directory for a text pattern (like grep -r). Returns the files containing the pattern — read the exact lines with readFile or bash afterwards.",
+    inputSchema: z.object({
+      path: z.string().describe("Absolute directory to search under."),
+      pattern: z.string().describe("Text pattern to search for."),
+    }),
+    outputSchema: z.object({
+      path: z.string(),
+      pattern: z.string(),
+      files: z.array(z.string()),
+      truncated: z.boolean(),
+    }),
+    execute: async ({ path, pattern }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      const res = await sandbox.fs.searchFiles(path, pattern)
+      const files = res.files ?? []
+      const truncated = files.length > MAX_LIST_ENTRIES
+      return {
+        path,
+        pattern,
+        files: files.slice(0, MAX_LIST_ENTRIES),
+        truncated,
+      }
+    },
+  })
+
+  const findFiles = tool({
+    description:
+      "Find files under a sandbox directory whose names match a glob pattern (e.g. '*.log', '**/*.ts'). Returns matches with file, line number and a preview.",
+    inputSchema: z.object({
+      path: z.string().describe("Absolute directory to search under."),
+      pattern: z.string().describe("Glob pattern, e.g. '*.log'."),
+    }),
+    outputSchema: z.object({
+      path: z.string(),
+      pattern: z.string(),
+      matches: z.array(
+        z.object({
+          file: z.string(),
+          line: z.number(),
+          preview: z.string(),
+        })
+      ),
+      truncated: z.boolean(),
+    }),
+    execute: async ({ path, pattern }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      const found = await sandbox.fs.findFiles(path, pattern)
+      const truncated = found.length > MAX_LIST_ENTRIES
+      return {
+        path,
+        pattern,
+        matches: found.slice(0, MAX_LIST_ENTRIES).map((m) => ({
+          file: m.file,
+          line: m.line,
+          preview: m.content.slice(0, 200),
+        })),
+        truncated,
+      }
+    },
+  })
+
+  const editFile = tool({
+    description:
+      "Replace an exact block of text inside a sandbox file, without rewriting the whole file. The old text must occur in the file.",
+    inputSchema: z.object({
+      path: z.string().describe("Absolute path of the file to edit."),
+      oldString: z.string().describe("Exact text to replace (must occur in the file)."),
+      newString: z.string().describe("Replacement text."),
+    }),
+    outputSchema: z.object({
+      path: z.string(),
+      ok: z.boolean(),
+    }),
+    execute: async ({ path, oldString, newString }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      const results = await sandbox.fs.replaceInFiles(
+        [path],
+        oldString,
+        newString
+      )
+      const first = results[0]
+      if (!first?.success) {
+        throw new Error(
+          first?.error ??
+            `Could not replace text in ${path}: the old text was not found. Read the file first to get the exact text.`
+        )
+      }
+      return { path, ok: true }
+    },
+  })
+
+  const openUrl = tool({
+    description:
+      "Open a URL in the sandbox's web browser (Chromium) on its desktop. Starts the desktop if needed. Afterwards use viewScreen to see the page yourself, keyboardHotkey/clickUiElement/mouseClick to interact with it, and showScreen to show it to the user.",
+    inputSchema: z.object({
+      url: z.string().describe("The http(s) URL to open."),
+    }),
+    outputSchema: z.object({
+      url: z.string(),
+      ok: z.boolean(),
+      logPath: z.string(),
+    }),
+    execute: async ({ url }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      await ensureDesktop(sandbox)
+      const safeUrl = url.replace(/"/g, "")
+      await sandbox.process.executeCommand(
+        `nohup chromium --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --window-size=1024,768 "${safeUrl}" > /tmp/chromium.log 2>&1 &`,
+        undefined,
+        // The shell has no DISPLAY set — inject it so Chromium connects
+        // to the visible desktop.
+        { DISPLAY: ":0" },
+        15
+      )
+      return { url, ok: true, logPath: "/tmp/chromium.log" }
+    },
+  })
+
+  const listWindows = tool({
+    description:
+      "List the open windows on the sandbox desktop (title, position, size, which is active). Use it to check whether an app you launched is actually open before interacting with it.",
+    inputSchema: z.object({}),
+    outputSchema: z.object({
+      count: z.number(),
+      windows: z.array(
+        z.object({
+          id: z.number(),
+          title: z.string(),
+          isActive: z.boolean(),
+          x: z.number(),
+          y: z.number(),
+          width: z.number(),
+          height: z.number(),
+        })
+      ),
+    }),
+    execute: async () => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      await ensureDesktop(sandbox)
+      const res = await sandbox.computerUse.display.getWindows()
+      const windows = (res.windows ?? []).map((w) => ({
+        id: w.id ?? 0,
+        title: w.title ?? "",
+        isActive: w.isActive ?? false,
+        x: w.x ?? 0,
+        y: w.y ?? 0,
+        width: w.width ?? 0,
+        height: w.height ?? 0,
+      }))
+      return { count: windows.length, windows }
+    },
+  })
+
+  const mouseDrag = tool({
+    description:
+      "Drag the mouse from one screen coordinate to another — for selecting text, moving windows, or using sliders. Only use coordinates you read from a recent screenshot.",
+    inputSchema: z.object({
+      startX: z.number().describe("Starting X coordinate in screen pixels."),
+      startY: z.number().describe("Starting Y coordinate in screen pixels."),
+      endX: z.number().describe("Ending X coordinate in screen pixels."),
+      endY: z.number().describe("Ending Y coordinate in screen pixels."),
+      button: z
+        .enum(["left", "right", "middle"])
+        .optional()
+        .describe("Mouse button. Defaults to left."),
+    }),
+    outputSchema: z.object({
+      ok: z.boolean(),
+      startX: z.number(),
+      startY: z.number(),
+      endX: z.number(),
+      endY: z.number(),
+    }),
+    execute: async ({ startX, startY, endX, endY, button }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      await ensureDesktop(sandbox)
+      await sandbox.computerUse.mouse.drag(
+        startX,
+        startY,
+        endX,
+        endY,
+        button ?? "left"
+      )
+      return { ok: true, startX, startY, endX, endY }
+    },
+  })
+
+  const keyboardHotkey = tool({
+    description:
+      "Press a keyboard shortcut chord on the sandbox desktop, e.g. 'ctrl+t' for a new browser tab, 'ctrl+l' to focus the address bar, 'alt+tab' to switch windows.",
+    inputSchema: z.object({
+      chord: z.string().describe("Shortcut chord, e.g. 'ctrl+t'."),
+    }),
+    outputSchema: z.object({
+      ok: z.boolean(),
+      chord: z.string(),
+    }),
+    execute: async ({ chord }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      await ensureDesktop(sandbox)
+      await sandbox.computerUse.keyboard.hotkey(chord)
+      return { ok: true, chord }
+    },
+  })
+
+  const findUiElement = tool({
+    description:
+      "Find desktop UI elements (buttons, text fields, links, ...) by role and/or name through the accessibility tree — no screenshot coordinates needed. Returns element ids with on-screen bounds: pass an id's element to clickUiElement, or derive click coordinates from its bounds.",
+    inputSchema: z.object({
+      role: z
+        .string()
+        .optional()
+        .describe("Element role, e.g. 'button', 'entry', 'link'."),
+      name: z
+        .string()
+        .optional()
+        .describe("Substring of the element's name, e.g. the button label."),
+      limit: z
+        .number()
+        .min(1)
+        .max(30)
+        .optional()
+        .describe("Max matches to return. Defaults to 15."),
+    }),
+    outputSchema: z.object({
+      count: z.number(),
+      truncated: z.boolean(),
+      elements: z.array(
+        z.object({
+          id: z.string(),
+          role: z.string(),
+          name: z.string(),
+          description: z.string(),
+          x: z.number(),
+          y: z.number(),
+          width: z.number(),
+          height: z.number(),
+        })
+      ),
+    }),
+    execute: async ({ role, name, limit }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      await ensureDesktop(sandbox)
+      const res = await sandbox.computerUse.accessibility.findNodes({
+        ...(role ? { role } : {}),
+        ...(name ? { name, nameMatch: "substring" } : {}),
+        scope: "all",
+        limit: limit ?? 15,
+      })
+      const matches = res.matches ?? []
+      return {
+        count: matches.length,
+        truncated: res.truncated ?? false,
+        elements: matches.map((m) => ({
+          id: m.id ?? "",
+          role: m.role ?? "",
+          name: m.name ?? "",
+          description: m.description ?? "",
+          x: m.bounds?.x ?? 0,
+          y: m.bounds?.y ?? 0,
+          width: m.bounds?.width ?? 0,
+          height: m.bounds?.height ?? 0,
+        })),
+      }
+    },
+  })
+
+  const clickUiElement = tool({
+    description:
+      "Click a desktop UI element found by role and/or name (e.g. the 'Search' button) without needing screen coordinates. Fails when nothing matches — then use findUiElement to explore, or viewScreen plus mouseClick.",
+    inputSchema: z.object({
+      role: z
+        .string()
+        .optional()
+        .describe("Element role, e.g. 'button', 'link'."),
+      name: z
+        .string()
+        .optional()
+        .describe(
+          "Substring of the element's name, e.g. the button label. At least one of role or name is required."
+        ),
+    }),
+    outputSchema: z.object({
+      ok: z.boolean(),
+      id: z.string(),
+      role: z.string(),
+      name: z.string(),
+    }),
+    execute: async ({ role, name }) => {
+      if (!role && !name) {
+        throw new Error("Provide at least one of role or name.")
+      }
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      await ensureDesktop(sandbox)
+      const res = await sandbox.computerUse.accessibility.findNodes({
+        ...(role ? { role } : {}),
+        ...(name ? { name, nameMatch: "substring" } : {}),
+        scope: "all",
+        limit: 5,
+      })
+      const match = res.matches?.[0]
+      if (!match?.id) {
+        throw new Error(
+          `No UI element found (role=${role ?? "-"}, name=${name ?? "-"}). Use findUiElement to explore, or viewScreen plus mouseClick.`
+        )
+      }
+      await sandbox.computerUse.accessibility.invokeNode(match.id, "click")
+      return {
+        ok: true,
+        id: match.id,
+        role: match.role ?? "",
+        name: match.name ?? "",
+      }
+    },
+  })
+
+  const wait = tool({
+    description:
+      "Pause for a few seconds, e.g. to let a web page or app finish loading before you viewScreen. Needs no sandbox.",
+    inputSchema: z.object({
+      seconds: z
+        .number()
+        .min(1)
+        .max(30)
+        .describe("Seconds to wait (1–30)."),
+    }),
+    outputSchema: z.object({
+      ok: z.boolean(),
+      seconds: z.number(),
+    }),
+    execute: async ({ seconds }) => {
+      await new Promise((resolve) => setTimeout(resolve, seconds * 1000))
+      return { ok: true, seconds }
+    },
+  })
+
+  const runPython = tool({
+    description:
+      "Run Python code in the sandbox and return its output. Use it for computation, data processing and scripting instead of shelling out from bash.",
+    inputSchema: z.object({
+      code: z.string().describe("The Python code to run."),
+      timeoutSeconds: z
+        .number()
+        .min(1)
+        .max(600)
+        .optional()
+        .describe("Max seconds to wait. Defaults to 60."),
+    }),
+    outputSchema: z.object({
+      exitCode: z.number(),
+      output: z.string(),
+      truncated: z.boolean(),
+    }),
+    execute: async ({ code, timeoutSeconds }) => {
+      const sandbox = await getRunningSandbox(requireSandboxId(sandboxId))
+      const res = await sandbox.process.codeRun(
+        code,
+        undefined,
+        timeoutSeconds ?? 60
+      )
+      const { text, truncated } = truncate(res.result, MAX_BASH_OUTPUT_CHARS)
+      return { exitCode: res.exitCode, output: text, truncated }
+    },
+  })
+
   return {
     bash,
     readFile,
     writeFile,
+    editFile,
     listFiles,
+    findFiles,
+    searchFiles,
+    statFile,
+    makeDir,
+    moveFile,
+    deleteFile,
+    wait,
+    runPython,
+    openUrl,
+    listWindows,
+    viewScreen,
+    showScreen,
+    findUiElement,
+    clickUiElement,
     mouseClick,
     mouseMove,
+    mouseDrag,
     mouseScroll,
     keyboardType,
     keyboardPress,
-    viewScreen,
-    showScreen,
+    keyboardHotkey,
   }
 }
 

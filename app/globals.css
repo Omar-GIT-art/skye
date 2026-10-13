@@ -184,6 +184,16 @@
   --sidebar-ring: #c85a32;
 }
 
+/* When the desktop side panel is closed, the chat panel is the resizable
+   group's only child: force it to fill the width even if the panel library
+   left a stale inline size on it (the header border would otherwise stop
+   short of the screen edge). Unlayered so it wins over the inline styles.
+   Inactive as soon as the side panel remounts. */
+[data-slot="resizable-panel-group"] > [data-slot="resizable-panel"]:only-child {
+  flex-basis: 100% !important;
+  flex-grow: 1 !important;
+}
+
 /* Warm, explicit hover for secondary buttons (e.g. "Create a new bot").
    Unlayered so it wins over the layered Tailwind hover utility.
    The generic oklch color-mix hover desaturates toward neutral gray and

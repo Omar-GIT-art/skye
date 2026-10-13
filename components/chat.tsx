@@ -6,7 +6,12 @@ import {
   useTriggerChatTransport,
 } from "@trigger.dev/sdk/chat/react"
 import type { InferChatUIMessageFromTools } from "@trigger.dev/sdk/ai"
-import { MessageSquareIcon } from "lucide-react"
+import {
+  CheckIcon,
+  CopyIcon,
+  MessageSquareIcon,
+  RefreshCcwIcon,
+} from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 
@@ -29,9 +34,17 @@ import {
 import { Image } from "@/components/ai-elements/image"
 import {
   Message,
+  MessageAction,
+  MessageActions,
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message"
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/ai-elements/reasoning"
+import { Shimmer } from "@/components/ai-elements/shimmer"
 import {
   PromptInput,
   type PromptInputMessage,
@@ -39,6 +52,10 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input"
+import {
+  Suggestion,
+  Suggestions,
+} from "@/components/ai-elements/suggestion"
 import {
   Tool,
   ToolContent,
@@ -60,14 +77,29 @@ type ToolPart = Extract<
 
 const toolTitles: Record<ToolPart["type"], string> = {
   "tool-bash": "Run command",
+  "tool-wait": "Wait",
+  "tool-runPython": "Run Python",
   "tool-readFile": "Read file",
   "tool-writeFile": "Write file",
+  "tool-editFile": "Edit file",
   "tool-listFiles": "List files",
+  "tool-findFiles": "Find files",
+  "tool-searchFiles": "Search files",
+  "tool-statFile": "File info",
+  "tool-makeDir": "Create folder",
+  "tool-moveFile": "Move file",
+  "tool-deleteFile": "Delete file",
+  "tool-openUrl": "Open in browser",
+  "tool-listWindows": "List windows",
   "tool-mouseClick": "Click",
   "tool-mouseMove": "Move mouse",
+  "tool-mouseDrag": "Drag",
   "tool-mouseScroll": "Scroll",
   "tool-keyboardType": "Type",
   "tool-keyboardPress": "Press key",
+  "tool-keyboardHotkey": "Shortcut",
+  "tool-findUiElement": "Find UI element",
+  "tool-clickUiElement": "Click UI element",
   "tool-viewScreen": "Look at screen",
   "tool-showScreen": "Show screen",
 }
@@ -98,7 +130,7 @@ function ToolCall({ part }: { part: ToolPart }) {
     <Tool>
       <ToolHeader
         state={part.state}
-        title={toolTitles[part.type]}
+        title={toolTitles[part.type] ?? part.type}
         type={part.type}
       />
       <ToolContent>
@@ -136,6 +168,27 @@ function ToolCallDetails({ part }: { part: ToolPart }) {
     )
   }
 
+  if (part.type === "tool-runPython") {
+    return (
+      <>
+        {part.input?.code ? (
+          <CodeBlock code={part.input.code} language="python" />
+        ) : null}
+        <ToolOutput
+          errorText={error}
+          output={
+            part.state === "output-available" ? (
+              <CodeBlock
+                code={part.output.output || `Exit code ${part.output.exitCode}`}
+                language="log"
+              />
+            ) : undefined
+          }
+        />
+      </>
+    )
+  }
+
   return (
     <>
       {part.input === undefined ? null : <ToolInput input={part.input} />}
@@ -144,6 +197,71 @@ function ToolCallDetails({ part }: { part: ToolPart }) {
         output={part.state === "output-available" ? part.output : undefined}
       />
     </>
+  )
+}
+
+const starterSuggestions = [
+  "Open the browser to https://example.com and show me what you see",
+  "List the files in my home directory",
+  "What's on the screen right now?",
+  "Tell me about this computer (OS, CPU, memory)",
+]
+
+// Copy / regenerate actions under each assistant message.
+function AssistantActions({
+  message,
+  isLast,
+  onRegenerate,
+}: {
+  message: SkyeMessage
+  isLast: boolean
+  onRegenerate: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+
+  if (message.role !== "assistant") {
+    return null
+  }
+
+  const text = message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => (part as { text: string }).text)
+    .join("\n\n")
+
+  async function handleCopy() {
+    if (!text) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Clipboard unavailable (permissions or insecure context) — no-op.
+    }
+  }
+
+  if (!text && !isLast) {
+    return null
+  }
+
+  return (
+    <MessageActions>
+      {text ? (
+        <MessageAction tooltip="Copy response" onClick={handleCopy}>
+          {copied ? (
+            <CheckIcon className="size-4" />
+          ) : (
+            <CopyIcon className="size-4" />
+          )}
+        </MessageAction>
+      ) : null}
+      {isLast ? (
+        <MessageAction tooltip="Regenerate response" onClick={onRegenerate}>
+          <RefreshCcwIcon className="size-4" />
+        </MessageAction>
+      ) : null}
+    </MessageActions>
   )
 }
 
@@ -287,6 +405,8 @@ function ChatBody({
     sendMessage({ text: message.text })
   }
 
+  const isStreaming = status === "streaming"
+
   return (
     <div
       data-slot="chat"
@@ -302,52 +422,115 @@ function ChatBody({
             <ConversationEmptyState
               icon={<MessageSquareIcon className="size-6" />}
               title="No messages yet"
-              description="Start a conversation to see messages here"
+              description="Ask me to browse the web, use apps, or work with files on my computer"
             />
           ) : (
-            messages.map((message) => (
-              <Message from={message.role} key={message.id}>
-                <MessageContent>
-                  {message.parts.map((part, index) => {
-                    if (part.type === "text") {
-                      return (
-                        <MessageResponse key={index}>
-                          {part.text}
-                        </MessageResponse>
-                      )
-                    }
-                    if (
-                      part.type === "dynamic-tool" ||
-                      part.type.startsWith("tool-")
-                    ) {
-                      return (
-                        <ToolCall key={index} part={part as ToolPart} />
-                      )
-                    }
-                    return null
-                  })}
-                </MessageContent>
-              </Message>
-            ))
+            <>
+              {messages.map((message, messageIndex) => {
+                // Consolidate reasoning parts into one block so multiple
+                // reasoning deltas don't render multiple "Thinking..."
+                // indicators (per ai-elements reasoning docs).
+                const reasoningParts = message.parts.filter(
+                  (part) => part.type === "reasoning"
+                ) as { text: string }[]
+                const reasoningText = reasoningParts
+                  .map((part) => part.text)
+                  .join("\n\n")
+                const lastPart = message.parts.at(-1)
+                const isReasoningStreaming =
+                  messageIndex === messages.length - 1 &&
+                  isStreaming &&
+                  lastPart?.type === "reasoning"
+
+                return (
+                  <Message from={message.role} key={message.id}>
+                    <MessageContent>
+                      {reasoningText ? (
+                        <Reasoning
+                          className="w-full"
+                          isStreaming={isReasoningStreaming}
+                        >
+                          <ReasoningTrigger />
+                          <ReasoningContent>{reasoningText}</ReasoningContent>
+                        </Reasoning>
+                      ) : null}
+                      {message.parts.map((part, index) => {
+                        if (part.type === "text") {
+                          return (
+                            <MessageResponse key={index}>
+                              {part.text}
+                            </MessageResponse>
+                          )
+                        }
+                        if (
+                          part.type === "dynamic-tool" ||
+                          part.type.startsWith("tool-")
+                        ) {
+                          return (
+                            <ToolCall key={index} part={part as ToolPart} />
+                          )
+                        }
+                        return null
+                      })}
+                    </MessageContent>
+                    <AssistantActions
+                      message={message}
+                      isLast={messageIndex === messages.length - 1}
+                      onRegenerate={() => regenerate()}
+                    />
+                  </Message>
+                )
+              })}
+              {status === "submitted" && (
+                <Message from="assistant">
+                  <MessageContent>
+                    <Shimmer duration={1}>Thinking...</Shimmer>
+                  </MessageContent>
+                </Message>
+              )}
+            </>
           )}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
 
       {error && (
-        <div className="flex items-center gap-2 px-1 py-2 text-sm text-destructive">
-          <span>Something went wrong.</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 py-2 text-sm text-destructive">
+          <span
+            className="line-clamp-2 min-w-0 flex-1 break-words"
+            title={error.message}
+          >
+            Something went wrong{error.message ? `: ${error.message}` : "."}
+          </span>
           <button
             type="button"
-            className="underline underline-offset-2"
+            className="shrink-0 underline underline-offset-2"
             onClick={() => regenerate()}
           >
             Retry
+          </button>
+          <button
+            type="button"
+            className="shrink-0 underline underline-offset-2"
+            onClick={() => sendMessage({ text: "Continue" })}
+          >
+            Continue
           </button>
         </div>
       )}
 
       <div className="mx-auto w-full max-w-4xl shrink-0 p-4 pt-0">
+        {messages.length === 0 && (
+          <Suggestions className="mb-2">
+            {starterSuggestions.map((suggestion) => (
+              <Suggestion
+                key={suggestion}
+                suggestion={suggestion}
+                onClick={(text) => sendMessage({ text })}
+              />
+            ))}
+          </Suggestions>
+        )}
         <PromptInput onSubmit={handleSubmit}>
           <PromptInputTextarea
             className="min-h-8 px-5 py-3"

@@ -98,10 +98,12 @@ export const MessageAction = ({
   );
 
   if (tooltip) {
+    // `render` swaps the trigger element instead of nesting: a <button>
+    // child inside TooltipTrigger's own <button> breaks hydration.
     return (
       <TooltipProvider>
         <Tooltip>
-          <TooltipTrigger>{button}</TooltipTrigger>
+          <TooltipTrigger render={button} />
           <TooltipContent>
             <p>{tooltip}</p>
           </TooltipContent>
